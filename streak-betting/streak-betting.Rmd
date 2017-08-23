@@ -1,0 +1,332 @@
+---
+title: "Betting on Streaks"
+author: "Michael D. Porter"
+date: |
+      | University of Alabama
+      | 22 Aug 2017
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+```
+
+
+## Lucky Streak
+
+I have some friends who like to gamble at the casinos. They told me their "winning" strategy is based on the concept of runs or streaks. 
+Their idea is to recognize when they are in the middle of a streak and increase the amount bet. Their basic strategy (a bit generalized) is to bet a small amount until they get two "wins" in a row, and then increase the bet. And continue increasing the bet for every additional "win". 
+
+- We know if we flip a coin many times, we will likely get a long run of heads
+- Give it a try: <https://www.random.org/coins/?num=20&cur=60-usd.5000c-gold-buffalo>
+- So why not bet on this phenomenon?  
+
+Even if you don't know probability, you can can very easily test this strategy in R.
+
+## Simulating Wins
+
+Here we will build a simple simulation that will *randomly* draw a series of "wins" and "losses" to mimic the casino. Say you are playing roulette or blackjack and have constant probability of winning. This also assumes the outcomes are *independent*, so past outcomes have no influence on current or future outcomes.  
+
+
+The first thing to do is the set-up. Here we set $p$, the probability of winning on any hand and $n$, the number of times played. Also, we set the *seed* for the random number generator so we get the same outcome every time we run the simulation (useful for classroom demos). You can follow along by copying and pasting into a script.
+```{r}
+#-- Settings
+set.seed(2016)               # set seed for RNG to allow replication  
+p = 0.50                     # probability of win
+n = 1000                     # number of times played
+```
+
+Next, we use the function `sample()` to generate the random outcomes.
+```{r}
+#-- Random sample of outcomes
+x = sample(x = c('win', 'lose'), size=n, replace=TRUE, prob=c(p, 1-p)) 
+
+#-- show/print the first few values in X
+head(x)
+
+#-- Get counts of outcomes
+table(x)
+```
+In this simulation, we got `r sum(x=='win')` wins and `r sum(x=='lose')` losses.
+
+## Run Lengths
+
+To get the information on winning streaks, we can use the function `rle()`. To see the help page of an R function, put a `?` before the function name, i.e., `?rle`.
+```{r}
+r = rle(x)       # ?rle returns a list of two elements: lengths and values
+r                # show the results
+```
+This gives us the run lengths (or length of winning and losing streaks).
+
+We can use the `table()` function again to get a summary of the streaks
+```{r}
+table(streak=r$lengths, r$values)
+```
+
+```{r, echo=FALSE}
+tab = table(streak=r$lengths, r$values)
+mx = max(r$lengths)
+value = r$values[which.max(r$length)]
+```
+
+This shows the longest streak was `r mx` `r ifelse(value=="win", "wins", "losses")` in a row.  
+
+
+
+
+
+## Evaluating the strategy
+
+With a little more effort we can evaluate how well the gambler\'s strategy would have done. First, we will make a function that will calculate the amount bet at each stage. The betting strategy is: if we get two "wins" in a row, then increase the bet. And continue increasing for every additional "win". At the next "lose", reset the bet back to initial value. Here, I will set the initial bet at ```1``` unit and the increase at ```.5``` units.
+```{r}
+make_bets <- function(x, initial=1, increase=1/2){
+  
+  #- initialize
+  n = length(x)               # length of x vector
+  bet = numeric(n)            # create numeric vector of length n
+  bet[1] = initial            # set initial bet value
+  streak = 0                  # set winning streak at 0
+  
+  #- loop 
+  for(i in 2:n){
+    if(x[i-1] == 'win'){
+      streak = streak + 1
+      bet[i] = ifelse(streak >= 2, bet[i-1] + increase, bet[i-1])
+    }
+    if(x[i-1] == 'lose'){ 
+      streak = 0
+      bet[i] = initial
+    }
+  }
+  return(bet)
+}
+```
+
+Running the betting function gives us the bets we would have made (if we stuck with our strategy)
+```{r}
+bet = make_bets(x)                      # get the bets
+
+head(data.frame(x,bet), 10)             # look at first 10 value
+
+mean(bet)                               # average bet made
+
+plot(bet, typ='l')                      # plot results
+abline(h=mean(bet), col='red', las=1)   # add red horizontal line
+```
+
+### Results
+
+We can see how many times we would have won or lost with each bet amount
+```{r}
+table(bet=bet, outcome=x)
+```
+
+To see how much money we would have made (or lost), we can just apply the profit for each game. If we lose, the profit is `-bet`, but if we win the profit is `payoff*bet`. 
+
+```{r}
+payoff = 0.95   # for every 1 unit bet, we get 0.95 units of profit
+
+profit = ifelse(x=='win', bet*payoff, -bet)
+```
+
+Put it all together in a data frame
+```{r}
+y = data.frame(x, bet, profit)
+head(y, 20)
+```
+
+Now we can visualize the outcome
+```{r}
+plot(profit, type='h')     # profit for each outcome
+
+plot(cumsum(profit),       # cumulative sum
+     type='l',             # set plot type to line
+     las=1,                # put y axis labels horizontal
+     xlab="number of games", # change x label     
+     ylab='Total Profit')  # change y label
+
+abline(h=0, col="lightgray")
+```
+
+Congratulations, we would have come out a winner! Well, if we would have kept playing `r n` times. The worst we would have done was stop at on the game `r which.min(cumsum(profit))` giving us a total profit of `r round(min(cumsum(profit)), 2)` units. 
+
+But what if we just bet 1 unit every time, without considering the *streaks*? 
+```{r}
+profit_1 = ifelse(x=='win', 1*payoff, -1)
+```
+
+```{r, eval=FALSE}
+lines(cumsum(profit_1), col="blue") # add the new total profit to plot
+```
+
+```{r, echo=FALSE}
+plot(cumsum(profit),       # cumulative sum
+     type='l',             # set plot type to line
+     las=1,                # put y axis labels horizontal
+     xlab="number of games", # change x label
+     ylab='Total Profit')  # change y label
+
+abline(h=0, col="lightgray")
+lines(cumsum(profit_1), col="blue")
+legend('topleft', c('streaks bet', '1 unit bet'), col=c("black", 'blue'), lty=1)
+```
+
+
+Or better yet, we should have bet 2 units each time!
+```{r}
+profit_2 = ifelse(x=='win', 2*payoff, -2)
+```
+
+```{r, eval=FALSE}
+lines(cumsum(profit_2), col="orange")
+```
+
+
+```{r, echo=FALSE}
+plot(cumsum(profit),       # cumulative sum
+     type='l',             # set plot type to line
+     las=1,                # put y axis labels horizontal
+     ylab='Total Profit',  # change y label
+     ylim=c(-55, 30))
+
+abline(h=0, col="lightgray")
+lines(cumsum(profit_1), col="blue")
+lines(cumsum(profit_2), col="orange")
+legend('topleft', c('streaks bet', '1 unit bet', '2 unit bet'), col=c("black", 'blue', 'orange'), lty=1)
+```
+
+Again, think about what would happen if we didn't play `r n` games? Using the 2 unit bet, we would have a low of `r round(min(cumsum(profit_2)),2)` units if we didn't continue playing. 
+
+
+## Replicable Patterns
+
+OK, so we won with our betting strategy. But we would have won with the naive betting strategy too. But, notice that we only would have come out ahead if we played over 700 games or so. 
+
+Are we seeing a real pattern? Or did this just happen to work out for us? Gamblers are notorious for only remembering the winning days, and forgetting the losing ones. Here is where simulation and probability can really help. 
+
+This lesson uses simulation to evaluate the strategy, but we could also use probability concepts to come to the same conclusion. 
+
+In short, this is not a wise strategy. Look up *gambler\'s fallacy* and *reverse martingale strategy* if you are interested in the details.
+
+### Observation \#1
+
+If the strategy were to work, then having a series of wins should increase the probability of getting another win. We said in advance that these were independent outcomes, so by definition this shouldn't be. If we flip a coin 5 times and get all heads, is the next flip due to be tails? Or are we on a streak and it is more likely to be heads? Or is it still 50-50 (for *fair* coin)?
+
+We can test this. Here is a plot of the proportion of wins and losses given a certain event history.
+```{r, echo=FALSE, out.width="100%"}
+library(dplyr)
+lag = tibble(x) %>% mutate(lag1=lag(x), lag2=lag(x,2), lag3=lag(x,3), lag4=lag(x,4)) 
+
+a0 = count(lag, x) %>% na.omit() %>% mutate(p=n/sum(n))  
+a1 = count(lag, lag1, x) %>% na.omit() %>% 
+  mutate(p=n/sum(n), lags=paste(lag1, sep=', '), nhist=1)  
+a2 = count(lag, lag1, lag2, x) %>% na.omit() %>% 
+  mutate(p=n/sum(n), lags=paste(lag2, lag1, sep=', '), nhist=2) 
+a3 = count(lag, lag1, lag2, lag3, x) %>% na.omit() %>% 
+  mutate(p=n/sum(n), lags=paste(lag3, lag2, lag1, sep=', '), nhist=3) 
+
+bb = bind_rows(a1, a2, a3) %>% 
+  filter(x=='win') %>% 
+  select(lags, x, n, p, nhist) 
+
+library(ggplot2)
+limits = aes(ymax=p + 1.96*sqrt(p*(1-p)/n), ymin=p - 1.96*sqrt(p*(1-p)/n))
+ggplot(bb, aes(x=lags, y=p)) + geom_pointrange(limits) + 
+  labs(y='Proportion won', x='') + 
+  facet_wrap(~nhist, scales="free", labeller="label_both") +
+  theme(axis.text.x = element_text(angle = 70, hjust = 1)) 
+```
+
+This shows that there is no *real* pattern. The probability of getting a "win" is not dependent on the past results. The game, as expected, is *memoryless*. What happened in the past does not impact what will happen in the future. 
+
+
+### Observation \#2
+
+This simulates the game for one player who plays `r n` games. It turned out that if we played the full `r n` games, we would have come out ahead. But this is due to chance (or some call it *luck*), not a great strategy.
+
+We can also simulate many gamblers. It looks like some of the gamblers would have come out with large profits, but some would have lost big too. You only hear from the ones that won big! This introduces a *response bias* whereby we can be lead to conclude a strategy is good because we only/mainly hear from the winners.
+```{r}
+#-- Settings
+set.seed(2016)       # set seed for RNG to allow replication  
+p = 0.50             # probability of win
+n = 1000             # number of times played    
+payoff = 0.95        # for every 1 unit bet, we get 0.95 units of profit
+ngamblers = 200      # number of gamblers
+
+#-- simulation of all gamblers
+Profit = Profit_1 = Profit_2 = matrix(NA, n, ngamblers)
+for(i in 1:ngamblers){
+  x = sample(x = c('win', 'lose'), size=n, replace=TRUE, prob=c(p, 1-p)) 
+  bet = make_bets(x)                      # get the bets
+  Profit[,i] = ifelse(x=='win', bet*payoff, -bet)
+  Profit_1[,i] = ifelse(x=='win', 1*payoff, -1)
+  Profit_2[,i] = ifelse(x=='win', 2*payoff, -2)
+}
+```
+
+```{r, echo=FALSE, out.width="100%"}
+matplot(apply(Profit, 2, cumsum),       # cumulative sum
+     type='l',             # set plot type to line
+     lty=1,
+     col="#80808030",
+     las=1,                # put y axis labels horizontal
+     ylab='Total Profit'   # change y label
+     ,xlab="number of games"
+     ,main=paste(ngamblers, 'gamblers')
+     )
+
+abline(h=0, col="white", lwd=2)
+lines(cumsum(profit), col="black", lwd=2)
+```
+The above plot shows the total profit functions for all 200 gamblers as well as our original outcome in bold. You should notice two important things. First, the variation grows as the number of games increase. The longer you play, the more variation in your profit. Second, and a bit more difficult to see from this plot, is that as the number of games increases more gamblers get negative profits. 
+
+To see this second property better, we can plot the average profit for our gamblers. The average profit is negative, so you can expect to be a loser. 
+```{r, echo=FALSE}
+a = apply(Profit, 2, cumsum)
+avgProfit = rowMeans(a)
+plot(avgProfit, typ='l', las=1,
+     xlab="number of games", ylab='average profit',
+     main='Average Profit')
+```
+
+And while some people are winners, this fraction decreases over time as well.
+```{r, echo=FALSE}
+a = apply(Profit, 2, cumsum)
+positive = apply(a, 1, function(x) mean(x>=0) )
+plot(positive, typ='l', las=1,
+     xlab="number of games", ylab='proportion',
+     main='Proportion of gambler with positive profit')
+```
+
+And finally, an estimate of the density of profit at the end of `r n` games shows that you should not expect to win big, but some people do.  
+```{r, echo=FALSE}
+y = a[1000,]
+plot(density(a), las=1, xlab="total profit", ylab="density", 
+     main=paste("density of profit at end of", n, "games"))
+abline(v=0)
+rug(y)
+```
+
+
+
+## Summary
+
+We can learn a few things from this exercise:
+
+- "You've got to know when to hold 'em, Know when to fold 'em"  
+- probability can be a difficult topic to grasp  
+- conditioning information (conditional probability) is the key to good understanding  
+- observed patterns aren\'t always *real* (i.e., repeatable)
+- simulation can help tremendously  
+- There was a saying by the lottery in my home state "Someone\'s going to win. Might as well be you!". Indeed, if enough people play (lottery, casino, stock market, investing, etc.) then some will win - and some will win *big*. But chances are it won\'t be you. Which brings us to *decision theory*, a topic that will have to wait for another day. 
+
+Also, check out the R Markdown file (.Rmd) that was used to generate this document to see the R code that is not shown. 
+
+And try to run the code yourself. Vary the settings (especially the probability of winning $p$) to see the effects on the outcome. It will make you want to own a casino! 
+
+
+ 
+
+
