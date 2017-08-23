@@ -1,4 +1,4 @@
-## streak-betting
+## Betting on Streaks
 
 A simulation based analysis of the Reverse Martingale gambling strategy <http://www.roulettesites.org/strategies/reverse-martingale/>. According to the website, the Reverse Martingale strategy is a good one: 
 
