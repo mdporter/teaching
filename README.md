@@ -1,2 +1,4 @@
 # teaching
-Notes and scripts for teaching
+Data, notes, and scripts for teaching
+
+
